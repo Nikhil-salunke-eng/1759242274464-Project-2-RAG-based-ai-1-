@@ -1,14 +1,13 @@
 """
 Core RAG functionality for the Teaching Assistant
-Supports multiple LLM providers: Ollama, OpenAI, Anthropic
+Supports OpenAI (default) and Anthropic for inference
 """
 import pandas as pd
 from sklearn.metrics.pairwise import cosine_similarity
 import numpy as np
 import joblib
-import requests
 import os
-from typing import Tuple, Optional
+from typing import Tuple
 import openai
 from anthropic import Anthropic
 
@@ -25,10 +24,8 @@ class RAGAssistant:
         """
         self.df = joblib.load(embeddings_path)
 
-        # DEFAULT PROVIDER = OPENAI
+        # Only OpenAI embeddings and model
         self.llm_provider = "openai"
-
-        # DEFAULT MODELS (OpenAI)
         self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
         self.llm_model = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
 
@@ -39,15 +36,12 @@ class RAGAssistant:
         else:
             self.openai_client = None
 
-        # Ollama config (optional local)
-        self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-
         # Anthropic (optional)
         self.anthropic_client = None
     
     
     def set_openai_config(self, api_key: str, embedding_model: str, llm_model: str):
-        """Configure OpenAI settings"""
+        """Configure OpenAI manually if needed"""
         self.llm_provider = "openai"
         self.embedding_model = embedding_model
         self.llm_model = llm_model
@@ -55,22 +49,14 @@ class RAGAssistant:
     
     
     def create_embedding(self, text_list: list) -> list:
-        """
-        Create embeddings for text list
-        
-        Args:
-            text_list: List of texts to embed
-            
-        Returns:
-            List of embeddings
-        """
+        """Always create embeddings using OpenAI"""
         return self._create_openai_embedding(text_list)
     
     
     def _create_openai_embedding(self, text_list: list) -> list:
         """Create embeddings using OpenAI"""
         if not self.openai_client:
-            raise ValueError("OpenAI API Key not found. Set OPENAI_API_KEY env variable.")
+            raise ValueError("OPENAI_API_KEY not found in environment variables.")
         
         embeddings = []
         for text in text_list:
@@ -83,14 +69,14 @@ class RAGAssistant:
     
     
     def inference(self, prompt: str) -> str:
-        """Generate response using OpenAI"""
+        """Always use OpenAI for inference"""
         return self._openai_inference(prompt)
     
     
     def _openai_inference(self, prompt: str) -> str:
         """Generate response using OpenAI"""
         if not self.openai_client:
-            raise ValueError("OpenAI API Key not found. Set OPENAI_API_KEY env variable.")
+            raise ValueError("OPENAI_API_KEY not found in environment variables.")
         
         response = self.openai_client.chat.completions.create(
             model=self.llm_model,
@@ -128,16 +114,24 @@ class RAGAssistant:
         new_df = self.df.loc[max_indx].copy()
         
         # Create prompt
-        prompt = f'''I am teaching web development in my Sigma web development course. Here are video subtitle chunks containing video title, video number, start time in seconds, end time in seconds, the text at that time:
+        prompt = f'''I am teaching web development in my Sigma WDT course. Here are subtitle chunks containing:
+video title, video number, start time, end time, text:
 
 {new_df[["title", "number", "start", "end", "text"]].to_json(orient="records")}
 ---------------------------------
-"{incoming_query}"
-User asked this question related to the video chunks, you have to answer in a human way (dont mention the above format, its just for you) where and how much content is taught in which video (in which video and at what timestamp) and guide the user to go to that particular video. If user asks unrelated question, tell him that you can only answer questions related to the course
+User asked: "{incoming_query}"
+
+Answer in a human-friendly tone, clearly explaining:
+- which video has relevant content
+- timestamps to view
+- what that content teaches
+
+If the user's question is unrelated to this course, politely tell them that you can only answer questions related to the video content.
 '''
         
         # Generate response
         response = self.inference(prompt)
         
         return response, new_df
+
 
