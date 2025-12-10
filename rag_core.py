@@ -24,33 +24,35 @@ class RAGAssistant:
             embeddings_path: Path to the joblib file containing embeddings
         """
         self.df = joblib.load(embeddings_path)
-        self.llm_provider = "ollama"
+
+        # DEFAULT PROVIDER = OPENAI
+        self.llm_provider = "openai"
+
+        # DEFAULT MODELS (OpenAI)
+        self.embedding_model = os.getenv("EMBEDDING_MODEL", "text-embedding-3-small")
+        self.llm_model = os.getenv("LLM_MODEL", "gpt-3.5-turbo")
+
+        # OpenAI client
+        openai_api_key = os.getenv("OPENAI_API_KEY", None)
+        if openai_api_key:
+            self.openai_client = openai.OpenAI(api_key=openai_api_key)
+        else:
+            self.openai_client = None
+
+        # Ollama config (optional local)
         self.ollama_url = os.getenv("OLLAMA_URL", "http://localhost:11434")
-        self.embedding_model = os.getenv("EMBEDDING_MODEL", "bge-m3")
-        self.llm_model = os.getenv("LLM_MODEL", "llama3.2")
-        self.openai_client = None
+
+        # Anthropic (optional)
         self.anthropic_client = None
-        
-    def set_ollama_config(self, url: str, embedding_model: str, llm_model: str):
-        """Configure Ollama settings"""
-        self.llm_provider = "ollama"
-        self.ollama_url = url
-        self.embedding_model = embedding_model
-        self.llm_model = llm_model
-        
+    
+    
     def set_openai_config(self, api_key: str, embedding_model: str, llm_model: str):
         """Configure OpenAI settings"""
         self.llm_provider = "openai"
         self.embedding_model = embedding_model
         self.llm_model = llm_model
         self.openai_client = openai.OpenAI(api_key=api_key)
-        
-    def set_anthropic_config(self, api_key: str, embedding_model: str, llm_model: str):
-        """Configure Anthropic settings"""
-        self.llm_provider = "anthropic"
-        self.embedding_model = embedding_model
-        self.llm_model = llm_model
-        self.anthropic_client = Anthropic(api_key=api_key)
+    
     
     def create_embedding(self, text_list: list) -> list:
         """
@@ -62,33 +64,13 @@ class RAGAssistant:
         Returns:
             List of embeddings
         """
-        if self.llm_provider == "ollama":
-            return self._create_ollama_embedding(text_list)
-        elif self.llm_provider == "openai":
-            return self._create_openai_embedding(text_list)
-        else:
-            # For Anthropic, we'll use OpenAI embeddings (Anthropic doesn't have embedding API)
-            if not self.openai_client:
-                raise ValueError("OpenAI client not initialized. Anthropic requires OpenAI for embeddings.")
-            return self._create_openai_embedding(text_list)
+        return self._create_openai_embedding(text_list)
     
-    def _create_ollama_embedding(self, text_list: list) -> list:
-        """Create embeddings using Ollama"""
-        r = requests.post(
-            f"{self.ollama_url}/api/embed",
-            json={
-                "model": self.embedding_model,
-                "input": text_list
-            },
-            timeout=60
-        )
-        r.raise_for_status()
-        return r.json()["embeddings"]
     
     def _create_openai_embedding(self, text_list: list) -> list:
         """Create embeddings using OpenAI"""
         if not self.openai_client:
-            raise ValueError("OpenAI client not initialized")
+            raise ValueError("OpenAI API Key not found. Set OPENAI_API_KEY env variable.")
         
         embeddings = []
         for text in text_list:
@@ -99,41 +81,16 @@ class RAGAssistant:
             embeddings.append(response.data[0].embedding)
         return embeddings
     
-    def inference(self, prompt: str) -> str:
-        """
-        Generate response from LLM
-        
-        Args:
-            prompt: Input prompt
-            
-        Returns:
-            Generated response text
-        """
-        if self.llm_provider == "ollama":
-            return self._ollama_inference(prompt)
-        elif self.llm_provider == "openai":
-            return self._openai_inference(prompt)
-        else:  # anthropic
-            return self._anthropic_inference(prompt)
     
-    def _ollama_inference(self, prompt: str) -> str:
-        """Generate response using Ollama"""
-        r = requests.post(
-            f"{self.ollama_url}/api/generate",
-            json={
-                "model": self.llm_model,
-                "prompt": prompt,
-                "stream": False
-            },
-            timeout=120
-        )
-        r.raise_for_status()
-        return r.json()["response"]
+    def inference(self, prompt: str) -> str:
+        """Generate response using OpenAI"""
+        return self._openai_inference(prompt)
+    
     
     def _openai_inference(self, prompt: str) -> str:
         """Generate response using OpenAI"""
         if not self.openai_client:
-            raise ValueError("OpenAI client not initialized")
+            raise ValueError("OpenAI API Key not found. Set OPENAI_API_KEY env variable.")
         
         response = self.openai_client.chat.completions.create(
             model=self.llm_model,
@@ -145,20 +102,6 @@ class RAGAssistant:
         )
         return response.choices[0].message.content
     
-    def _anthropic_inference(self, prompt: str) -> str:
-        """Generate response using Anthropic"""
-        if not self.anthropic_client:
-            raise ValueError("Anthropic client not initialized")
-        
-        message = self.anthropic_client.messages.create(
-            model=self.llm_model,
-            max_tokens=1024,
-            system="You are a helpful teaching assistant that guides students to relevant course content.",
-            messages=[
-                {"role": "user", "content": prompt}
-            ]
-        )
-        return message.content[0].text
     
     def query(self, incoming_query: str, top_k: int = 5) -> Tuple[str, pd.DataFrame]:
         """
