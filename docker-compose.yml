@@ -1,0 +1,37 @@
+version: '3.8'
+
+services:
+  rag-app:
+    build: .
+    ports:
+      - "8501:8501"
+    environment:
+      - OLLAMA_URL=${OLLAMA_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-bge-m3}
+      - LLM_MODEL=${LLM_MODEL:-llama3.2}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - EMBEDDINGS_PATH=${EMBEDDINGS_PATH:-embeddings.joblib}
+    volumes:
+      - ./embeddings.joblib:/app/embeddings.joblib:ro
+      - ./jsons:/app/jsons:ro
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  # Optional: Uncomment if you want to run Ollama in Docker
+  # ollama:
+  #   image: ollama/ollama:latest
+  #   ports:
+  #     - "11434:11434"
+  #   volumes:
+  #     - ollama_data:/root/.ollama
+  #   restart: unless-stopped
+
+# volumes:
+#   ollama_data:
+

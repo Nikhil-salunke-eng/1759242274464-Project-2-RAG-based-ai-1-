@@ -1,0 +1,56 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Environment
+.env
+.env.local
+*.env
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Testing
+.pytest_cache
+.coverage
+htmlcov
+
+# Project specific (keep only what's needed)
+videos/
+audios/
+*.mp3
+*.mp4
+prompt.txt
+response.txt
+
+# Keep these
+# embeddings.joblib
+# jsons/
+
